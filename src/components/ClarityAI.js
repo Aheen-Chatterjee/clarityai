@@ -19,7 +19,7 @@ const ClarityAI = () => {
   const recordingTimerRef = useRef(null);
 
   // Replace with your Render URL
-  const API_URL = 'http://localhost:8000';
+  const API_URL = 'https://clarityai2backend.onrender.com';
 
   useEffect(() => {
     // Show intro screen for 3 seconds
