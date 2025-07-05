@@ -19,7 +19,7 @@ const ClarityAI = () => {
   const recordingTimerRef = useRef(null);
 
   // Replace with your Render URL
-  const API_URL = 'https://clarityai2backend.onrender.com';
+  const API_URL = 'http://localhost:8000';
 
   useEffect(() => {
     // Show intro screen for 3 seconds
@@ -107,25 +107,56 @@ const ClarityAI = () => {
   };
 
   const transcribeAudio = async (audioBlob) => {
+    // Use browser's Web Speech API instead of backend transcription
     setIsTranscribing(true);
+    
     try {
-      const formData = new FormData();
-      formData.append('audio_file', audioBlob, 'recording.webm');
-
-      const response = await fetch(`${API_URL}/transcribe`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setSpeechText(result.text);
-      } else {
-        showError('Transcription failed');
+      // Check if Web Speech API is available
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        showError('Speech recognition not supported in this browser');
+        setIsTranscribing(false);
+        return;
       }
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      // Create audio URL and play it for recognition
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setSpeechText(transcript);
+        setIsTranscribing(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        showError('Speech recognition failed. Please try typing your text instead.');
+        setIsTranscribing(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      recognition.onend = () => {
+        setIsTranscribing(false);
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      // Start recognition
+      recognition.start();
+      
+      // Play the recorded audio to help with recognition context
+      audio.play().catch(console.error);
+      
     } catch (error) {
-      showError('Transcription failed');
-    } finally {
+      console.error('Transcription setup error:', error);
+      showError('Speech recognition setup failed');
       setIsTranscribing(false);
     }
   };
