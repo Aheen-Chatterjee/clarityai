@@ -1,11 +1,16 @@
 import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import ClarityAI from './components/ClarityAI';
+import NotFound from './components/NotFound';
 
 function App() {
   return (
-    <div className="App">
-      <ClarityAI />
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<ClarityAI />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Router>
   );
 }
 
