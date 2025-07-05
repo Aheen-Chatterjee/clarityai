@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import LanguageSwitcher from './LanguageSwitcher';
 
 const ClarityAI = () => {
   const [currentScreen, setCurrentScreen] = useState('intro');
@@ -45,7 +44,7 @@ const aboutContent = [
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
-      
+
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'en-US';
@@ -88,10 +87,10 @@ const aboutContent = [
   const toggleTheme = () => {
     const newTheme = !isDarkMode;
     setIsDarkMode(newTheme);
-    
+
     // Save to localStorage
     localStorage.setItem('clarityai-theme', newTheme ? 'dark' : 'light');
-    
+
     // Apply theme to document
     document.documentElement.setAttribute('data-theme', newTheme ? 'dark' : 'light');
   };
@@ -116,18 +115,18 @@ const prevCarousel = () => {
     // Load saved theme or detect system preference
     const savedTheme = localStorage.getItem('clarityai-theme');
     const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
+
     let initialTheme;
     if (savedTheme) {
       initialTheme = savedTheme === 'dark';
     } else {
       initialTheme = systemPrefersDark;
     }
-    
+
     setIsDarkMode(initialTheme);
     document.documentElement.setAttribute('data-theme', initialTheme ? 'dark' : 'light');
     document.body.className = initialTheme ? 'dark-theme' : 'light-theme';
-    
+
     const timer = setTimeout(() => {
       setCurrentScreen('input');
     }, 3000);
@@ -178,7 +177,7 @@ const prevCarousel = () => {
 
     setCurrentScreen('loading');
     setIsLoading(true);
-    
+
     try {
       const response = await fetch(`${API_URL}/analyze`, {
         method: 'POST',
@@ -210,12 +209,12 @@ const playTextToSpeech = async (text, voiceType = 'default', speechIndex = null)
     pauseTextToSpeech();
     return;
   }
-  
+
   // Stop any currently playing speech
   if (isPlayingAudio !== null) {
     stopTextToSpeech();
   }
-  
+
   setIsPlayingAudio(speechIndex);
 
   try {
@@ -263,10 +262,10 @@ const enhancedSpeechSynthesis = async (text, voiceType) => {
 
       const utterance = new SpeechSynthesisUtterance(text);
       utteranceRef.current = utterance;
-      
+
       // Enhanced voice selection with better quality voices
       let selectedVoice = null;
-      
+
       const voicePreferences = {
         'progressive': [
           'Microsoft Zira - English (United States)',
@@ -303,14 +302,14 @@ const enhancedSpeechSynthesis = async (text, voiceType) => {
       };
 
       const preferences = voicePreferences[voiceType] || voicePreferences['default'];
-      
+
       for (const preference of preferences) {
         if (typeof preference === 'string') {
           selectedVoice = voices.find(v => v.name === preference);
         } else if (preference && typeof preference === 'object') {
           selectedVoice = preference;
         }
-        
+
         if (selectedVoice) break;
       }
 
@@ -342,7 +341,7 @@ const enhancedSpeechSynthesis = async (text, voiceType) => {
         utteranceRef.current = null;
         resolve();
       };
-      
+
       utterance.onerror = (event) => {
         setIsPlayingAudio(null);
         utteranceRef.current = null;
@@ -367,11 +366,11 @@ const enhancedSpeechSynthesis = async (text, voiceType) => {
   const fallbackToSpeechSynthesis = (text, voiceType) => {
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(text);
-      
+
       // Get available voices and select the best one
       const voices = window.speechSynthesis.getVoices();
       let selectedVoice = null;
-      
+
       // Voice selection logic for different demographics
       if (voiceType === 'progressive') {
         selectedVoice = voices.find(voice => 
@@ -394,19 +393,19 @@ const enhancedSpeechSynthesis = async (text, voiceType) => {
           voice.name.includes('US')
         ) || voices.find(voice => voice.name.includes('Female'));
       }
-      
+
       if (selectedVoice) {
         utterance.voice = selectedVoice;
       }
-      
+
       utterance.rate = 0.85;    // Natural speaking rate
       utterance.pitch = 1.0;    // Natural pitch
       utterance.volume = 0.9;   // Good volume level
-      
+
       utterance.onend = () => {
         setIsPlayingAudio(null);
       };
-      
+
       utterance.onerror = () => {
         setIsPlayingAudio(null);
         showError('Text-to-speech failed');
@@ -428,7 +427,7 @@ const enhancedSpeechSynthesis = async (text, voiceType) => {
 
   const copyResults = () => {
     if (!analysisResult) return;
-    
+
     const resultsText = `
 ClarityAI Analysis Results
 ========================
@@ -439,7 +438,7 @@ Demographics: ${analysisResult.demographics.join(', ')}
 Alternative Speeches:
 ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}`).join('\n\n')}
     `.trim();
-    
+
     navigator.clipboard.writeText(resultsText).then(() => {
       alert('Results copied to clipboard!');
     }).catch(() => {
@@ -476,7 +475,7 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
 >
   ?
 </button>
-      
+
       {/* Theme Toggle Button */}
       <button 
         className="theme-toggle"
@@ -495,17 +494,17 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
         <h2>About ClarityAI</h2>
         <button className="close-btn" onClick={toggleAbout}>×</button>
       </div>
-      
+
       <div className="carousel-container">
         <div className="carousel-slide">
           <div className="slide-icon">{aboutContent[currentCarousel].icon}</div>
           <h3>{aboutContent[currentCarousel].title}</h3>
           <p>{aboutContent[currentCarousel].content}</p>
         </div>
-        
+
         <div className="carousel-controls">
           <button className="carousel-btn" onClick={prevCarousel}>‹</button>
-          
+
           <div className="carousel-indicators">
             {aboutContent.map((_, index) => (
               <span 
@@ -515,18 +514,18 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
               ></span>
             ))}
           </div>
-          
+
           <button className="carousel-btn" onClick={nextCarousel}>›</button>
         </div>
       </div>
-      
+
       <div className="about-footer">
         <p>Powered by advanced AI • Free to use • Privacy focused</p>
       </div>
     </div>
   </div>
 )}
-      
+
       {/* Animated background */}
       <div className="background-animation">
         <div className="floating-shape shape-1"></div>
@@ -534,7 +533,7 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
         <div className="floating-shape shape-3"></div>
         <div className="floating-shape shape-4"></div>
       </div>
-      
+
       {/* Error Toast */}
       {error && (
         <div className="error-toast">
@@ -580,7 +579,7 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
                   placeholder="Type your speech here or use the microphone button below..."
                   className={`speech-textarea ${isTranscribing ? 'listening' : ''}`}
                 />
-                
+
                 {isTranscribing && (
                   <div className="transcribing-indicator">
                     <div className="pulse-dot"></div>
@@ -600,7 +599,7 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
                       </span>
                     )}
                   </div>
-                  
+
                   <div className="voice-buttons">
                     <button 
                       onClick={isListening ? stopListening : startListening}
@@ -609,7 +608,7 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
                     >
                       {isListening ? '⏹️ Stop Listening' : '🎤 Start Voice Input'}
                     </button>
-                    
+
                     <button
                       onClick={clearText}
                       disabled={!speechText.trim() || isListening}
@@ -618,7 +617,7 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
                       🗑️ Clear Text
                     </button>
                   </div>
-                  
+
                   <div className="voice-tip">
                     💡 Click "Start Voice Input" and speak clearly
                   </div>
@@ -687,9 +686,6 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
             <div className="stats-grid">
               <div className="stat-card">
                 <h3 className="stat-title">✅ Detected Category</h3>
-              return (
-                  <div className={`app-container ${isDarkMode ? 'dark-theme' : 'light-theme'}`}>
-                  <LanguageSwitcher />
                 <p className="stat-value">{analysisResult.category}</p>
               </div>
               <div className="stat-card">
@@ -732,7 +728,7 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
               <button onClick={copyResults} className="action-btn primary">
                 📋 Copy Results
               </button>
-              
+
               <button onClick={resetApp} className="action-btn secondary">
                 🔁 New Analysis
               </button>
