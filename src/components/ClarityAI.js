@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import LanguageSwitcher from './LanguageSwitcher';
 
 const ClarityAI = () => {
   const [currentScreen, setCurrentScreen] = useState('intro');
