@@ -10,12 +10,34 @@ const ClarityAI = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [showAbout, setShowAbout] = useState(false);
+  const [currentCarousel, setCurrentCarousel] = useState(0);
 
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
+  const utteranceRef = useRef(null);
 
   // Replace with your Render URL
   const API_URL = 'https://clarityai2backend.onrender.com';
+
+  // About content for carousels
+const aboutContent = [
+  {
+    title: "🎤 Speech Analysis",
+    content: "Clarity AI analyzes your speech patterns and identifies the demographic perspectives embedded in your communication. Our advanced AI understands nuances in language, tone, and messaging style.",
+    icon: "🔍"
+  },
+  {
+    title: "🔄 Perspective Generation", 
+    content: "Get alternative versions of your speech tailored to different demographic groups. See how your message might resonate with progressive, conservative, moderate, and other audience segments.",
+    icon: "👥"
+  },
+  {
+    title: "🎯 Communication Enhancement",
+    content: "Improve your public speaking, presentations, and written communication by understanding how different audiences perceive your message. Perfect for politicians, educators, and public speakers.",
+    icon: "📈"
+  }
+];
 
   // Initialize speech recognition
   const initializeSpeechRecognition = useCallback(() => {
@@ -72,6 +94,22 @@ const ClarityAI = () => {
     // Apply theme to document
     document.documentElement.setAttribute('data-theme', newTheme ? 'dark' : 'light');
   };
+
+  // About modal functions
+const toggleAbout = () => {
+  setShowAbout(!showAbout);
+  if (!showAbout) {
+    setCurrentCarousel(0);
+  }
+};
+
+const nextCarousel = () => {
+  setCurrentCarousel((prev) => (prev + 1) % aboutContent.length);
+};
+
+const prevCarousel = () => {
+  setCurrentCarousel((prev) => (prev - 1 + aboutContent.length) % aboutContent.length);
+};
 
   useEffect(() => {
     // Load saved theme or detect system preference
@@ -164,71 +202,165 @@ const ClarityAI = () => {
   };
 
   // Enhanced Text-to-Speech with natural voices and pause functionality
-  const playTextToSpeech = async (text, voiceType = 'default', speechIndex = null) => {
-    // If already playing this speech, pause it
-    if (isPlayingAudio === speechIndex) {
-      pauseTextToSpeech();
-      return;
-    }
-    
-    // Stop any currently playing speech
-    if (isPlayingAudio !== null) {
-      stopTextToSpeech();
-    }
-    
-    setIsPlayingAudio(speechIndex);
+  // Enhanced Text-to-Speech with high-quality free voices
+const playTextToSpeech = async (text, voiceType = 'default', speechIndex = null) => {
+  // If already playing this speech, pause it
+  if (isPlayingAudio === speechIndex) {
+    pauseTextToSpeech();
+    return;
+  }
+  
+  // Stop any currently playing speech
+  if (isPlayingAudio !== null) {
+    stopTextToSpeech();
+  }
+  
+  setIsPlayingAudio(speechIndex);
 
-    try {
-      // Enhanced voice selection for more natural speech
-      const voices = {
-        'progressive': 'UK English Female',
-        'conservative': 'US English Male', 
-        'moderate': 'Australian English Female',
-        'default': 'US English Female'
-      };
-
-      const voiceName = voices[voiceType] || voices['default'];
-
-      if (typeof window.responsiveVoice !== 'undefined') {
-        window.responsiveVoice.speak(text, voiceName, {
-          rate: 0.85,          // Slightly slower for more natural pace
-          pitch: 1.0,          // Natural pitch
-          volume: 0.9,         // Higher volume
-          onend: () => {
-            setIsPlayingAudio(null);
-          },
-          onerror: () => {
-            setIsPlayingAudio(null);
-            fallbackToSpeechSynthesis(text, voiceType);
-          }
-        });
-      } else {
-        fallbackToSpeechSynthesis(text, voiceType);
-      }
-    } catch (error) {
-      console.error('TTS error:', error);
-      setIsPlayingAudio(null);
-      showError('Text-to-speech failed');
-    }
-  };
+  try {
+    await enhancedSpeechSynthesis(text, voiceType);
+  } catch (error) {
+    console.error('TTS error:', error);
+    setIsPlayingAudio(null);
+    showError('Text-to-speech failed');
+  }
+};
 
   const pauseTextToSpeech = () => {
-    if (typeof window.responsiveVoice !== 'undefined') {
-      window.responsiveVoice.pause();
-    } else if ('speechSynthesis' in window) {
-      window.speechSynthesis.pause();
-    }
-    setIsPlayingAudio(null);
-  };
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.pause();
+    window.speechSynthesis.cancel();
+  }
+  setIsPlayingAudio(null);
+  utteranceRef.current = null;
+};
 
-  const stopTextToSpeech = () => {
-    if (typeof window.responsiveVoice !== 'undefined') {
-      window.responsiveVoice.cancel();
-    } else if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+const stopTextToSpeech = () => {
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
+  }
+  setIsPlayingAudio(null);
+  utteranceRef.current = null;
+};
+
+// Enhanced Speech Synthesis with better voice selection
+// Enhanced Speech Synthesis with better voice selection
+const enhancedSpeechSynthesis = async (text, voiceType) => {
+  return new Promise((resolve, reject) => {
+    if (!('speechSynthesis' in window)) {
+      reject(new Error('Speech synthesis not supported'));
+      return;
     }
-    setIsPlayingAudio(null);
-  };
+
+    // Wait for voices to load
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length === 0) {
+        setTimeout(loadVoices, 100);
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utteranceRef.current = utterance;
+      
+      // Enhanced voice selection with better quality voices
+      let selectedVoice = null;
+      
+      const voicePreferences = {
+        'progressive': [
+          'Microsoft Zira - English (United States)',
+          'Google UK English Female',
+          'Alex (Enhanced)',
+          voices.find(v => v.name.includes('Female') && v.name.includes('UK')),
+          voices.find(v => v.name.includes('Female') && v.lang.includes('en-GB')),
+          voices.find(v => v.name.includes('Female') && v.lang.includes('en'))
+        ],
+        'conservative': [
+          'Microsoft David - English (United States)',
+          'Google US English Male',
+          'Fred (Enhanced)',
+          voices.find(v => v.name.includes('Male') && v.name.includes('US')),
+          voices.find(v => v.name.includes('Male') && v.lang.includes('en-US')),
+          voices.find(v => v.name.includes('Male') && v.lang.includes('en'))
+        ],
+        'moderate': [
+          'Microsoft Catherine - English (Australia)',
+          'Google Australian English Female',
+          'Karen (Enhanced)',
+          voices.find(v => v.name.includes('Australia')),
+          voices.find(v => v.lang.includes('en-AU')),
+          voices.find(v => v.name.includes('Female') && v.lang.includes('en'))
+        ],
+        'default': [
+          'Microsoft Zira - English (United States)',
+          'Google US English Female',
+          'Samantha (Enhanced)',
+          voices.find(v => v.name.includes('Enhanced')),
+          voices.find(v => v.name.includes('Microsoft')),
+          voices.find(v => v.lang.includes('en-US'))
+        ]
+      };
+
+      const preferences = voicePreferences[voiceType] || voicePreferences['default'];
+      
+      for (const preference of preferences) {
+        if (typeof preference === 'string') {
+          selectedVoice = voices.find(v => v.name === preference);
+        } else if (preference && typeof preference === 'object') {
+          selectedVoice = preference;
+        }
+        
+        if (selectedVoice) break;
+      }
+
+      if (!selectedVoice) {
+        selectedVoice = voices.find(v => v.lang.includes('en')) || voices[0];
+      }
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+
+      utterance.rate = 0.8;
+      utterance.pitch = 1.0;
+      utterance.volume = 0.9;
+
+      if (voiceType === 'progressive') {
+        utterance.pitch = 1.1;
+        utterance.rate = 0.85;
+      } else if (voiceType === 'conservative') {
+        utterance.pitch = 0.9;
+        utterance.rate = 0.75;
+      } else if (voiceType === 'moderate') {
+        utterance.pitch = 1.0;
+        utterance.rate = 0.8;
+      }
+
+      utterance.onend = () => {
+        setIsPlayingAudio(null);
+        utteranceRef.current = null;
+        resolve();
+      };
+      
+      utterance.onerror = (event) => {
+        setIsPlayingAudio(null);
+        utteranceRef.current = null;
+        reject(new Error(`Speech synthesis error: ${event.error}`));
+      };
+
+      window.speechSynthesis.cancel();
+      setTimeout(() => {
+        window.speechSynthesis.speak(utterance);
+      }, 100);
+    };
+
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.addEventListener('voiceschanged', loadVoices, { once: true });
+    } else {
+      loadVoices();
+    }
+  });
+};
 
   // Enhanced fallback TTS with better voice selection
   const fallbackToSpeechSynthesis = (text, voiceType) => {
@@ -334,6 +466,15 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
       )}
 
       <audio ref={audioRef} />
+      {/* About Button */}
+<button 
+  className="about-toggle"
+  onClick={toggleAbout}
+  aria-label="About ClarityAI"
+  title="Learn about ClarityAI"
+>
+  ?
+</button>
       
       {/* Theme Toggle Button */}
       <button 
@@ -344,6 +485,46 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
       >
         {isDarkMode ? '☀️' : '🌙'}
       </button>
+
+      {/* About Modal */}
+{showAbout && (
+  <div className="about-modal">
+    <div className="about-content">
+      <div className="about-header">
+        <h2>About ClarityAI</h2>
+        <button className="close-btn" onClick={toggleAbout}>×</button>
+      </div>
+      
+      <div className="carousel-container">
+        <div className="carousel-slide">
+          <div className="slide-icon">{aboutContent[currentCarousel].icon}</div>
+          <h3>{aboutContent[currentCarousel].title}</h3>
+          <p>{aboutContent[currentCarousel].content}</p>
+        </div>
+        
+        <div className="carousel-controls">
+          <button className="carousel-btn" onClick={prevCarousel}>‹</button>
+          
+          <div className="carousel-indicators">
+            {aboutContent.map((_, index) => (
+              <span 
+                key={index}
+                className={`indicator ${index === currentCarousel ? 'active' : ''}`}
+                onClick={() => setCurrentCarousel(index)}
+              ></span>
+            ))}
+          </div>
+          
+          <button className="carousel-btn" onClick={nextCarousel}>›</button>
+        </div>
+      </div>
+      
+      <div className="about-footer">
+        <p>Powered by advanced AI • Free to use • Privacy focused</p>
+      </div>
+    </div>
+  </div>
+)}
       
       {/* Animated background */}
       <div className="background-animation">

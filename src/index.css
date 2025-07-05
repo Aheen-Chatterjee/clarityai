@@ -100,6 +100,223 @@ body {
   color: var(--dark-text-primary);
 }
 
+/* About Button */
+.about-toggle {
+  position: fixed;
+  top: 2rem;
+  left: 2rem;
+  width: 60px;
+  height: 60px;
+  border: none;
+  border-radius: 50%;
+  background: var(--secondary-gradient);
+  color: white;
+  font-size: 1.8rem;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 1000;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+  transition: var(--transition-bounce);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.about-toggle:hover {
+  transform: scale(1.1) rotate(-15deg);
+  box-shadow: 0 8px 30px rgba(59, 130, 246, 0.4);
+}
+
+/* About Modal */
+.about-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.about-content {
+  background: var(--dark-surface);
+  border: 1px solid var(--dark-border);
+  border-radius: 20px;
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  animation: slideInScale 0.4s ease-out;
+}
+
+.light-theme .about-content {
+  background: var(--light-surface);
+  border: 1px solid var(--light-border);
+}
+
+.about-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.about-header h2 {
+  background: var(--primary-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  color: var(--dark-text-secondary);
+  transition: var(--transition-smooth);
+}
+
+.light-theme .close-btn {
+  color: var(--light-text-secondary);
+}
+
+.close-btn:hover {
+  transform: scale(1.2) rotate(90deg);
+  color: #ef4444;
+}
+
+.carousel-container {
+  text-align: center;
+}
+
+.carousel-slide {
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 0;
+}
+
+.slide-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  animation: bounce 2s infinite;
+}
+
+.carousel-slide h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--dark-text-primary);
+}
+
+.light-theme .carousel-slide h3 {
+  color: var(--light-text-primary);
+}
+
+.carousel-slide p {
+  line-height: 1.6;
+  color: var(--dark-text-secondary);
+  font-size: 1rem;
+}
+
+.light-theme .carousel-slide p {
+  color: var(--light-text-secondary);
+}
+
+.carousel-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.carousel-btn {
+  background: var(--primary-gradient);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: var(--transition-bounce);
+}
+
+.carousel-btn:hover {
+  transform: scale(1.2);
+}
+
+.carousel-indicators {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(251, 191, 36, 0.3);
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.indicator.active {
+  background: var(--yellow-accent);
+  transform: scale(1.2);
+}
+
+.about-footer {
+  margin-top: 2rem;
+  text-align: center;
+  padding-top: 1rem;
+  border-top: 1px solid var(--dark-border);
+}
+
+.light-theme .about-footer {
+  border-top: 1px solid var(--light-border);
+}
+
+.about-footer p {
+  font-size: 0.9rem;
+  color: var(--dark-text-secondary);
+  opacity: 0.8;
+}
+
+.light-theme .about-footer p {
+  color: var(--light-text-secondary);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.8) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+
+
 /* Theme Toggle Button */
 .theme-toggle {
   position: fixed;
