@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 const ClarityAI = () => {
   const [currentScreen, setCurrentScreen] = useState('intro');
   const [speechText, setSpeechText] = useState('');
+  const [interimText, setInterimText] = useState('');
   const [analysisResult, setAnalysisResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -21,23 +22,23 @@ const ClarityAI = () => {
   const API_URL = 'https://clarityai2backend.onrender.com';
 
   // About content for carousels
-const aboutContent = [
-  {
-    title: "🎤 Speech Analysis",
-    content: "Clarity AI analyzes your speech patterns and identifies the demographic perspectives embedded in your communication. Our advanced AI understands nuances in language, tone, and messaging style.",
-    icon: "🔍"
-  },
-  {
-    title: "🔄 Perspective Generation", 
-    content: "Get alternative versions of your speech tailored to different demographic groups. See how your message might resonate with progressive, conservative, moderate, and other audience segments.",
-    icon: "👥"
-  },
-  {
-    title: "🎯 Communication Enhancement",
-    content: "Improve your public speaking, presentations, and written communication by understanding how different audiences perceive your message. Perfect for politicians, educators, and public speakers.",
-    icon: "📈"
-  }
-];
+  const aboutContent = [
+    {
+      title: "🎤 Speech Analysis",
+      content: "Clarity AI analyzes your speech patterns and identifies the demographic perspectives embedded in your communication. Our advanced AI understands nuances in language, tone, and messaging style.",
+      icon: "🔍"
+    },
+    {
+      title: "🔄 Perspective Generation", 
+      content: "Get alternative versions of your speech tailored to different demographic groups. See how your message might resonate with progressive, conservative, moderate, and other audience segments.",
+      icon: "👥"
+    },
+    {
+      title: "🎯 Communication Enhancement",
+      content: "Improve your public speaking, presentations, and written communication by understanding how different audiences perceive your message. Perfect for politicians, educators, and public speakers.",
+      icon: "📈"
+    }
+  ];
 
   // Initialize speech recognition
   const initializeSpeechRecognition = useCallback(() => {
@@ -55,29 +56,46 @@ const aboutContent = [
       };
 
       recognitionRef.current.onresult = (event) => {
+        let interimTranscript = '';
         let finalTranscript = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
           }
         }
 
+        // Update interim text for live feed
+        setInterimText(interimTranscript);
+
+        // Only update final text when we have final results
         if (finalTranscript) {
-          setSpeechText(prev => prev + finalTranscript);
+          setSpeechText(prev => {
+            // Avoid duplicates by checking if the text already ends with this transcript
+            const trimmedFinal = finalTranscript.trim();
+            if (!prev.endsWith(trimmedFinal)) {
+              return prev + (prev ? ' ' : '') + trimmedFinal;
+            }
+            return prev;
+          });
+          setInterimText(''); // Clear interim text after adding final text
         }
       };
 
       recognitionRef.current.onend = () => {
         setIsListening(false);
         setIsTranscribing(false);
+        setInterimText(''); // Clear interim text when recognition ends
       };
 
       recognitionRef.current.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
         setIsTranscribing(false);
+        setInterimText('');
         showError(`Speech recognition error: ${event.error}`);
       };
     }
@@ -96,20 +114,20 @@ const aboutContent = [
   };
 
   // About modal functions
-const toggleAbout = () => {
-  setShowAbout(!showAbout);
-  if (!showAbout) {
-    setCurrentCarousel(0);
-  }
-};
+  const toggleAbout = () => {
+    setShowAbout(!showAbout);
+    if (!showAbout) {
+      setCurrentCarousel(0);
+    }
+  };
 
-const nextCarousel = () => {
-  setCurrentCarousel((prev) => (prev + 1) % aboutContent.length);
-};
+  const nextCarousel = () => {
+    setCurrentCarousel((prev) => (prev + 1) % aboutContent.length);
+  };
 
-const prevCarousel = () => {
-  setCurrentCarousel((prev) => (prev - 1 + aboutContent.length) % aboutContent.length);
-};
+  const prevCarousel = () => {
+    setCurrentCarousel((prev) => (prev - 1 + aboutContent.length) % aboutContent.length);
+  };
 
   useEffect(() => {
     // Load saved theme or detect system preference
@@ -167,6 +185,7 @@ const prevCarousel = () => {
 
   const clearText = () => {
     setSpeechText('');
+    setInterimText('');
   };
 
   const analyzeSpeech = async () => {
@@ -201,225 +220,168 @@ const prevCarousel = () => {
     }
   };
 
-  // Enhanced Text-to-Speech with natural voices and pause functionality
   // Enhanced Text-to-Speech with high-quality free voices
-const playTextToSpeech = async (text, voiceType = 'default', speechIndex = null) => {
-  // If already playing this speech, pause it
-  if (isPlayingAudio === speechIndex) {
-    pauseTextToSpeech();
-    return;
-  }
-
-  // Stop any currently playing speech
-  if (isPlayingAudio !== null) {
-    stopTextToSpeech();
-  }
-
-  setIsPlayingAudio(speechIndex);
-
-  try {
-    await enhancedSpeechSynthesis(text, voiceType);
-  } catch (error) {
-    console.error('TTS error:', error);
-    setIsPlayingAudio(null);
-    showError('Text-to-speech failed');
-  }
-};
-
-  const pauseTextToSpeech = () => {
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.pause();
-    window.speechSynthesis.cancel();
-  }
-  setIsPlayingAudio(null);
-  utteranceRef.current = null;
-};
-
-const stopTextToSpeech = () => {
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
-  }
-  setIsPlayingAudio(null);
-  utteranceRef.current = null;
-};
-
-// Enhanced Speech Synthesis with better voice selection
-// Enhanced Speech Synthesis with better voice selection
-const enhancedSpeechSynthesis = async (text, voiceType) => {
-  return new Promise((resolve, reject) => {
-    if (!('speechSynthesis' in window)) {
-      reject(new Error('Speech synthesis not supported'));
+  const playTextToSpeech = async (text, voiceType = 'default', speechIndex = null) => {
+    // If already playing this speech, pause it
+    if (isPlayingAudio === speechIndex) {
+      pauseTextToSpeech();
       return;
     }
 
-    // Wait for voices to load
-    const loadVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length === 0) {
-        setTimeout(loadVoices, 100);
+    // Stop any currently playing speech
+    if (isPlayingAudio !== null) {
+      stopTextToSpeech();
+    }
+
+    setIsPlayingAudio(speechIndex);
+
+    try {
+      await enhancedSpeechSynthesis(text, voiceType);
+    } catch (error) {
+      console.error('TTS error:', error);
+      setIsPlayingAudio(null);
+      showError('Text-to-speech failed');
+    }
+  };
+
+  const pauseTextToSpeech = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.pause();
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(null);
+    utteranceRef.current = null;
+  };
+
+  const stopTextToSpeech = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(null);
+    utteranceRef.current = null;
+  };
+
+  // Enhanced Speech Synthesis with better voice selection
+  const enhancedSpeechSynthesis = async (text, voiceType) => {
+    return new Promise((resolve, reject) => {
+      if (!('speechSynthesis' in window)) {
+        reject(new Error('Speech synthesis not supported'));
         return;
       }
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utteranceRef.current = utterance;
-
-      // Enhanced voice selection with better quality voices
-      let selectedVoice = null;
-
-      const voicePreferences = {
-        'progressive': [
-          'Microsoft Zira - English (United States)',
-          'Google UK English Female',
-          'Alex (Enhanced)',
-          voices.find(v => v.name.includes('Female') && v.name.includes('UK')),
-          voices.find(v => v.name.includes('Female') && v.lang.includes('en-GB')),
-          voices.find(v => v.name.includes('Female') && v.lang.includes('en'))
-        ],
-        'conservative': [
-          'Microsoft David - English (United States)',
-          'Google US English Male',
-          'Fred (Enhanced)',
-          voices.find(v => v.name.includes('Male') && v.name.includes('US')),
-          voices.find(v => v.name.includes('Male') && v.lang.includes('en-US')),
-          voices.find(v => v.name.includes('Male') && v.lang.includes('en'))
-        ],
-        'moderate': [
-          'Microsoft Catherine - English (Australia)',
-          'Google Australian English Female',
-          'Karen (Enhanced)',
-          voices.find(v => v.name.includes('Australia')),
-          voices.find(v => v.lang.includes('en-AU')),
-          voices.find(v => v.name.includes('Female') && v.lang.includes('en'))
-        ],
-        'default': [
-          'Microsoft Zira - English (United States)',
-          'Google US English Female',
-          'Samantha (Enhanced)',
-          voices.find(v => v.name.includes('Enhanced')),
-          voices.find(v => v.name.includes('Microsoft')),
-          voices.find(v => v.lang.includes('en-US'))
-        ]
-      };
-
-      const preferences = voicePreferences[voiceType] || voicePreferences['default'];
-
-      for (const preference of preferences) {
-        if (typeof preference === 'string') {
-          selectedVoice = voices.find(v => v.name === preference);
-        } else if (preference && typeof preference === 'object') {
-          selectedVoice = preference;
+      // Wait for voices to load
+      const loadVoices = () => {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) {
+          setTimeout(loadVoices, 100);
+          return;
         }
 
-        if (selectedVoice) break;
-      }
+        const utterance = new SpeechSynthesisUtterance(text);
+        utteranceRef.current = utterance;
 
-      if (!selectedVoice) {
-        selectedVoice = voices.find(v => v.lang.includes('en')) || voices[0];
-      }
+        // Enhanced voice selection with better quality voices
+        let selectedVoice = null;
 
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-      }
+        const voicePreferences = {
+          'progressive': [
+            'Microsoft Zira - English (United States)',
+            'Google UK English Female',
+            'Alex (Enhanced)',
+            voices.find(v => v.name.includes('Female') && v.name.includes('UK')),
+            voices.find(v => v.name.includes('Female') && v.lang.includes('en-GB')),
+            voices.find(v => v.name.includes('Female') && v.lang.includes('en'))
+          ],
+          'conservative': [
+            'Microsoft David - English (United States)',
+            'Google US English Male',
+            'Fred (Enhanced)',
+            voices.find(v => v.name.includes('Male') && v.name.includes('US')),
+            voices.find(v => v.name.includes('Male') && v.lang.includes('en-US')),
+            voices.find(v => v.name.includes('Male') && v.lang.includes('en'))
+          ],
+          'moderate': [
+            'Microsoft Catherine - English (Australia)',
+            'Google Australian English Female',
+            'Karen (Enhanced)',
+            voices.find(v => v.name.includes('Australia')),
+            voices.find(v => v.lang.includes('en-AU')),
+            voices.find(v => v.name.includes('Female') && v.lang.includes('en'))
+          ],
+          'default': [
+            'Microsoft Zira - English (United States)',
+            'Google US English Female',
+            'Samantha (Enhanced)',
+            voices.find(v => v.name.includes('Enhanced')),
+            voices.find(v => v.name.includes('Microsoft')),
+            voices.find(v => v.lang.includes('en-US'))
+          ]
+        };
 
-      utterance.rate = 0.8;
-      utterance.pitch = 1.0;
-      utterance.volume = 0.9;
+        const preferences = voicePreferences[voiceType] || voicePreferences['default'];
 
-      if (voiceType === 'progressive') {
-        utterance.pitch = 1.1;
-        utterance.rate = 0.85;
-      } else if (voiceType === 'conservative') {
-        utterance.pitch = 0.9;
-        utterance.rate = 0.75;
-      } else if (voiceType === 'moderate') {
-        utterance.pitch = 1.0;
+        for (const preference of preferences) {
+          if (typeof preference === 'string') {
+            selectedVoice = voices.find(v => v.name === preference);
+          } else if (preference && typeof preference === 'object') {
+            selectedVoice = preference;
+          }
+
+          if (selectedVoice) break;
+        }
+
+        if (!selectedVoice) {
+          selectedVoice = voices.find(v => v.lang.includes('en')) || voices[0];
+        }
+
+        if (selectedVoice) {
+          utterance.voice = selectedVoice;
+        }
+
         utterance.rate = 0.8;
-      }
+        utterance.pitch = 1.0;
+        utterance.volume = 0.9;
 
-      utterance.onend = () => {
-        setIsPlayingAudio(null);
-        utteranceRef.current = null;
-        resolve();
+        if (voiceType === 'progressive') {
+          utterance.pitch = 1.1;
+          utterance.rate = 0.85;
+        } else if (voiceType === 'conservative') {
+          utterance.pitch = 0.9;
+          utterance.rate = 0.75;
+        } else if (voiceType === 'moderate') {
+          utterance.pitch = 1.0;
+          utterance.rate = 0.8;
+        }
+
+        utterance.onend = () => {
+          setIsPlayingAudio(null);
+          utteranceRef.current = null;
+          resolve();
+        };
+
+        utterance.onerror = (event) => {
+          setIsPlayingAudio(null);
+          utteranceRef.current = null;
+          reject(new Error(`Speech synthesis error: ${event.error}`));
+        };
+
+        window.speechSynthesis.cancel();
+        setTimeout(() => {
+          window.speechSynthesis.speak(utterance);
+        }, 100);
       };
 
-      utterance.onerror = (event) => {
-        setIsPlayingAudio(null);
-        utteranceRef.current = null;
-        reject(new Error(`Speech synthesis error: ${event.error}`));
-      };
-
-      window.speechSynthesis.cancel();
-      setTimeout(() => {
-        window.speechSynthesis.speak(utterance);
-      }, 100);
-    };
-
-    if (window.speechSynthesis.getVoices().length === 0) {
-      window.speechSynthesis.addEventListener('voiceschanged', loadVoices, { once: true });
-    } else {
-      loadVoices();
-    }
-  });
-};
-
-  // Enhanced fallback TTS with better voice selection
-  const fallbackToSpeechSynthesis = (text, voiceType) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(text);
-
-      // Get available voices and select the best one
-      const voices = window.speechSynthesis.getVoices();
-      let selectedVoice = null;
-
-      // Voice selection logic for different demographics
-      if (voiceType === 'progressive') {
-        selectedVoice = voices.find(voice => 
-          voice.name.includes('Female') && 
-          (voice.name.includes('UK') || voice.name.includes('British'))
-        ) || voices.find(voice => voice.name.includes('Female'));
-      } else if (voiceType === 'conservative') {
-        selectedVoice = voices.find(voice => 
-          voice.name.includes('Male') && 
-          voice.name.includes('US')
-        ) || voices.find(voice => voice.name.includes('Male'));
-      } else if (voiceType === 'moderate') {
-        selectedVoice = voices.find(voice => 
-          voice.name.includes('Female') && 
-          voice.name.includes('Australian')
-        ) || voices.find(voice => voice.name.includes('Female'));
+      if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.addEventListener('voiceschanged', loadVoices, { once: true });
       } else {
-        selectedVoice = voices.find(voice => 
-          voice.name.includes('Female') && 
-          voice.name.includes('US')
-        ) || voices.find(voice => voice.name.includes('Female'));
+        loadVoices();
       }
-
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-      }
-
-      utterance.rate = 0.85;    // Natural speaking rate
-      utterance.pitch = 1.0;    // Natural pitch
-      utterance.volume = 0.9;   // Good volume level
-
-      utterance.onend = () => {
-        setIsPlayingAudio(null);
-      };
-
-      utterance.onerror = () => {
-        setIsPlayingAudio(null);
-        showError('Text-to-speech failed');
-      };
-
-      window.speechSynthesis.speak(utterance);
-    } else {
-      setIsPlayingAudio(null);
-      showError('Text-to-speech not supported in this browser');
-    }
+    });
   };
 
   const resetApp = () => {
     setSpeechText('');
+    setInterimText('');
     setAnalysisResult(null);
     setError('');
     setCurrentScreen('input');
@@ -466,15 +428,16 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
       )}
 
       <audio ref={audioRef} />
+      
       {/* About Button */}
-<button 
-  className="about-toggle"
-  onClick={toggleAbout}
-  aria-label="About ClarityAI"
-  title="Learn about ClarityAI"
->
-  ?
-</button>
+      <button 
+        className="about-toggle"
+        onClick={toggleAbout}
+        aria-label="About ClarityAI"
+        title="Learn about ClarityAI"
+      >
+        ?
+      </button>
 
       {/* Theme Toggle Button */}
       <button 
@@ -487,44 +450,44 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
       </button>
 
       {/* About Modal */}
-{showAbout && (
-  <div className="about-modal">
-    <div className="about-content">
-      <div className="about-header">
-        <h2>About ClarityAI</h2>
-        <button className="close-btn" onClick={toggleAbout}>×</button>
-      </div>
+      {showAbout && (
+        <div className="about-modal">
+          <div className="about-content">
+            <div className="about-header">
+              <h2>About ClarityAI</h2>
+              <button className="close-btn" onClick={toggleAbout}>×</button>
+            </div>
 
-      <div className="carousel-container">
-        <div className="carousel-slide">
-          <div className="slide-icon">{aboutContent[currentCarousel].icon}</div>
-          <h3>{aboutContent[currentCarousel].title}</h3>
-          <p>{aboutContent[currentCarousel].content}</p>
-        </div>
+            <div className="carousel-container">
+              <div className="carousel-slide">
+                <div className="slide-icon">{aboutContent[currentCarousel].icon}</div>
+                <h3>{aboutContent[currentCarousel].title}</h3>
+                <p>{aboutContent[currentCarousel].content}</p>
+              </div>
 
-        <div className="carousel-controls">
-          <button className="carousel-btn" onClick={prevCarousel}>‹</button>
+              <div className="carousel-controls">
+                <button className="carousel-btn" onClick={prevCarousel}>‹</button>
 
-          <div className="carousel-indicators">
-            {aboutContent.map((_, index) => (
-              <span 
-                key={index}
-                className={`indicator ${index === currentCarousel ? 'active' : ''}`}
-                onClick={() => setCurrentCarousel(index)}
-              ></span>
-            ))}
+                <div className="carousel-indicators">
+                  {aboutContent.map((_, index) => (
+                    <span 
+                      key={index}
+                      className={`indicator ${index === currentCarousel ? 'active' : ''}`}
+                      onClick={() => setCurrentCarousel(index)}
+                    ></span>
+                  ))}
+                </div>
+
+                <button className="carousel-btn" onClick={nextCarousel}>›</button>
+              </div>
+            </div>
+
+            <div className="about-footer">
+              <p>Powered by advanced AI • Free to use • Privacy focused</p>
+            </div>
           </div>
-
-          <button className="carousel-btn" onClick={nextCarousel}>›</button>
         </div>
-      </div>
-
-      <div className="about-footer">
-        <p>Powered by advanced AI • Free to use • Privacy focused</p>
-      </div>
-    </div>
-  </div>
-)}
+      )}
 
       {/* Animated background */}
       <div className="background-animation">
@@ -574,7 +537,7 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
                   Enter your speech or use voice input
                 </label>
                 <textarea
-                  value={speechText}
+                  value={speechText + (interimText ? (speechText ? ' ' : '') + interimText : '')}
                   onChange={(e) => setSpeechText(e.target.value)}
                   placeholder="Type your speech here or use the microphone button below..."
                   className={`speech-textarea ${isTranscribing ? 'listening' : ''}`}
@@ -611,7 +574,7 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
 
                     <button
                       onClick={clearText}
-                      disabled={!speechText.trim() || isListening}
+                      disabled={(!speechText.trim() && !interimText) || isListening}
                       className="clear-btn"
                     >
                       🗑️ Clear Text
