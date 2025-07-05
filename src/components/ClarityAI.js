@@ -1,4 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import LanguageSwitcher from './LanguageSwitcher';
+
+function ClarityAI() {
+  const { t } = useTranslation();
+
+  return (
+    <div>
+      <LanguageSwitcher />
+      <h1>{t('welcome')}</h1>
+    </div>
+  );
+}
 
 const ClarityAI = () => {
   const [currentScreen, setCurrentScreen] = useState('intro');
