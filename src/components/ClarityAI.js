@@ -1,25 +1,65 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 const ClarityAI = () => {
   const [currentScreen, setCurrentScreen] = useState('intro');
   const [speechText, setSpeechText] = useState('');
   const [analysisResult, setAnalysisResult] = useState(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [hasUserVoice, setHasUserVoice] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [isUploadingVoice, setIsUploadingVoice] = useState(false);
-  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(null);
+
+  const recognitionRef = useRef(null);
   const audioRef = useRef(null);
-  const recordingTimerRef = useRef(null);
 
   // Replace with your Render URL
-  const API_URL = 'http://localhost:8000';
+  const API_URL = 'https://clarityai2backend.onrender.com';
+
+  // Initialize speech recognition
+  const initializeSpeechRecognition = useCallback(() => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = 'en-US';
+
+      recognitionRef.current.onstart = () => {
+        setIsListening(true);
+        setIsTranscribing(true);
+      };
+
+      recognitionRef.current.onresult = (event) => {
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          }
+        }
+
+        // Update speech text with final results
+        if (finalTranscript) {
+          setSpeechText(prev => prev + finalTranscript);
+        }
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+        setIsTranscribing(false);
+      };
+
+      recognitionRef.current.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        setIsTranscribing(false);
+        showError(`Speech recognition error: ${event.error}`);
+      };
+    }
+  }, []);
 
   useEffect(() => {
     // Show intro screen for 3 seconds
@@ -27,164 +67,43 @@ const ClarityAI = () => {
       setCurrentScreen('input');
     }, 3000);
 
-    return () => clearTimeout(timer);
-  }, []);
+    // Initialize Web Speech API
+    initializeSpeechRecognition();
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-      }
-    };
-  }, []);
+    return () => clearTimeout(timer);
+  }, [initializeSpeechRecognition]);
 
   const showError = (message) => {
     setError(message);
     setTimeout(() => setError(''), 5000);
   };
 
-  const startRecording = async () => {
+  const startListening = () => {
+    if (!recognitionRef.current) {
+      showError('Speech recognition not supported in this browser');
+      return;
+    }
+
     try {
-      setError('');
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          sampleRate: 44100
-        } 
-      });
-      
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-          ? 'audio/webm;codecs=opus' 
-          : 'audio/webm'
-      });
-      
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-      setRecordingTime(0);
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await transcribeAudio(audioBlob);
-        await cloneVoice(audioBlob);
-        stream.getTracks().forEach(track => track.stop());
-        
-        if (recordingTimerRef.current) {
-          clearInterval(recordingTimerRef.current);
-        }
-      };
-
-      mediaRecorder.start(1000);
-      setIsRecording(true);
-      
-      // Start timer
-      recordingTimerRef.current = setInterval(() => {
-        setRecordingTime(prev => prev + 1);
-      }, 1000);
-
+      recognitionRef.current.start();
     } catch (error) {
-      showError('Could not access microphone. Please check permissions.');
+      showError('Could not start speech recognition');
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-      }
+  const stopListening = () => {
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop();
     }
   };
 
-  const transcribeAudio = async (audioBlob) => {
-    // Use browser's Web Speech API instead of backend transcription
-    setIsTranscribing(true);
-    
-    try {
-      // Check if Web Speech API is available
-      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        showError('Speech recognition not supported in this browser');
-        setIsTranscribing(false);
-        return;
-      }
-
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      
-      recognition.lang = 'en-US';
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
-
-      // Create audio URL and play it for recognition
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setSpeechText(transcript);
-        setIsTranscribing(false);
-        URL.revokeObjectURL(audioUrl);
-      };
-
-      recognition.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        showError('Speech recognition failed. Please try typing your text instead.');
-        setIsTranscribing(false);
-        URL.revokeObjectURL(audioUrl);
-      };
-
-      recognition.onend = () => {
-        setIsTranscribing(false);
-        URL.revokeObjectURL(audioUrl);
-      };
-
-      // Start recognition
-      recognition.start();
-      
-      // Play the recorded audio to help with recognition context
-      audio.play().catch(console.error);
-      
-    } catch (error) {
-      console.error('Transcription setup error:', error);
-      showError('Speech recognition setup failed');
-      setIsTranscribing(false);
-    }
-  };
-
-  const cloneVoice = async (audioBlob) => {
-    setIsUploadingVoice(true);
-    try {
-      const formData = new FormData();
-      formData.append('audio_file', audioBlob, 'voice.webm');
-
-      const response = await fetch(`${API_URL}/clone-voice`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (response.ok) {
-        setHasUserVoice(true);
-      }
-    } catch (error) {
-      console.log('Voice cloning failed');
-    } finally {
-      setIsUploadingVoice(false);
-    }
+  const clearText = () => {
+    setSpeechText('');
   };
 
   const analyzeSpeech = async () => {
     if (!speechText.trim()) {
-      showError('Please enter some text');
+      showError('Please enter some text or use voice input');
       return;
     }
 
@@ -203,62 +122,129 @@ const ClarityAI = () => {
         setAnalysisResult(result);
         setCurrentScreen('results');
       } else {
-        showError('Analysis failed');
+        showError('Analysis failed. Please check your connection and try again.');
         setCurrentScreen('input');
       }
     } catch (error) {
-      showError('Analysis failed');
+      showError('Analysis failed. Server might be starting up, please try again.');
       setCurrentScreen('input');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const playAudio = async (text) => {
-    setIsGeneratingAudio(true);
-    try {
-      const response = await fetch(`${API_URL}/generate-audio?text=${encodeURIComponent(text)}&use_user_voice=${hasUserVoice}`, {
-        method: 'POST',
-      });
+  // Text-to-Speech using ResponsiveVoice API (free)
+  const playTextToSpeech = async (text, voiceType = 'default', speechIndex = null) => {
+    setIsPlayingAudio(speechIndex);
 
-      if (response.ok) {
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        
-        if (audioRef.current) {
-          audioRef.current.src = audioUrl;
-          audioRef.current.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-          };
-          audioRef.current.play();
-        }
+    try {
+      // Define different voices for different perspectives
+      const voices = {
+        'progressive': 'UK English Female',
+        'conservative': 'UK English Male',
+        'moderate': 'US English Female',
+        'default': 'US English Male'
+      };
+
+      const voiceName = voices[voiceType] || voices['default'];
+
+      // Check if ResponsiveVoice is available
+      if (typeof window.responsiveVoice !== 'undefined') {
+        window.responsiveVoice.speak(text, voiceName, {
+          rate: 0.9,
+          pitch: 1,
+          volume: 0.8,
+          onend: () => {
+            setIsPlayingAudio(null);
+          },
+          onerror: () => {
+            setIsPlayingAudio(null);
+            // Fallback to browser TTS
+            fallbackToSpeechSynthesis(text);
+          }
+        });
       } else {
-        showError('Audio generation failed');
+        // Fallback to browser's built-in speech synthesis
+        fallbackToSpeechSynthesis(text);
       }
     } catch (error) {
-      showError('Audio generation failed');
-    } finally {
-      setIsGeneratingAudio(false);
+      console.error('TTS error:', error);
+      setIsPlayingAudio(null);
+      showError('Text-to-speech failed');
+    }
+  };
+
+  // Fallback TTS using browser's Speech Synthesis API
+  const fallbackToSpeechSynthesis = (text) => {
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 0.8;
+      
+      utterance.onend = () => {
+        setIsPlayingAudio(null);
+      };
+      
+      utterance.onerror = () => {
+        setIsPlayingAudio(null);
+        showError('Text-to-speech failed');
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } else {
+      setIsPlayingAudio(null);
+      showError('Text-to-speech not supported in this browser');
     }
   };
 
   const resetApp = () => {
     setSpeechText('');
     setAnalysisResult(null);
-    setHasUserVoice(false);
     setError('');
-    setRecordingTime(0);
     setCurrentScreen('input');
   };
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const copyResults = () => {
+    if (!analysisResult) return;
+    
+    const resultsText = `
+ClarityAI Analysis Results
+========================
+
+Category: ${analysisResult.category}
+Demographics: ${analysisResult.demographics.join(', ')}
+
+Alternative Speeches:
+${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}`).join('\n\n')}
+    `.trim();
+    
+    navigator.clipboard.writeText(resultsText).then(() => {
+      alert('Results copied to clipboard!');
+    }).catch(() => {
+      alert('Failed to copy to clipboard');
+    });
+  };
+
+  const isSpeechSupported = () => {
+    return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+  };
+
+  const getVoiceType = (demographic) => {
+    const lowerDemo = demographic.toLowerCase();
+    if (lowerDemo.includes('progressive') || lowerDemo.includes('liberal')) return 'progressive';
+    if (lowerDemo.includes('conservative') || lowerDemo.includes('right')) return 'conservative';
+    if (lowerDemo.includes('moderate') || lowerDemo.includes('center')) return 'moderate';
+    return 'default';
   };
 
   return (
     <div>
+      {/* Load ResponsiveVoice API */}
+      {typeof window !== 'undefined' && (
+        <script src="https://code.responsivevoice.org/responsivevoice.js?key=FREE_TRIAL_KEY"></script>
+      )}
+
       <audio ref={audioRef} />
       
       {/* Error Toast */}
@@ -316,14 +302,17 @@ const ClarityAI = () => {
           <div className="card space-y-6">
             <div className="space-y-4">
               <label className="text-lg font-semibold text-gray-900">
-                Enter your speech or talking points
+                Enter your speech or use voice input
               </label>
               <textarea
                 value={speechText}
                 onChange={(e) => setSpeechText(e.target.value)}
-                placeholder="Paste your speech here or record audio below..."
+                placeholder="Type your speech here or use the microphone button below..."
                 className="textarea"
-                disabled={isTranscribing}
+                style={{
+                  minHeight: '150px',
+                  borderColor: isTranscribing ? '#3b82f6' : '#e5e7eb'
+                }}
               />
               
               {isTranscribing && (
@@ -338,17 +327,18 @@ const ClarityAI = () => {
                     animation: 'spin 1s linear infinite',
                     marginRight: '0.5rem'
                   }}></div>
-                  Transcribing audio...
+                  Listening... Speak now
                 </div>
               )}
             </div>
 
-            <div className="space-y-4">
-              {/* Recording Section */}
+            {/* Voice Input Controls */}
+            {isSpeechSupported() && (
               <div style={{
                 backgroundColor: '#f9fafb',
                 borderRadius: '0.5rem',
-                padding: '1rem'
+                padding: '1rem',
+                border: '1px solid #e5e7eb'
               }}>
                 <div style={{
                   display: 'flex',
@@ -356,97 +346,119 @@ const ClarityAI = () => {
                   alignItems: 'center',
                   marginBottom: '0.75rem'
                 }}>
-                  <span className="font-medium text-gray-700">Voice Recording</span>
-                  {isRecording && (
+                  <span className="font-medium text-gray-700">🎤 Voice Input</span>
+                  {isListening && (
                     <span style={{
                       color: '#dc2626',
-                      fontFamily: 'monospace',
-                      fontWeight: 'bold'
+                      fontWeight: 'bold',
+                      animation: 'pulse 1s infinite'
                     }}>
-                      🔴 {formatTime(recordingTime)}
+                      🔴 Recording...
                     </span>
                   )}
                 </div>
                 
-                <div className="flex gap-4">
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <button 
-                    onClick={isRecording ? stopRecording : startRecording}
-                    disabled={isTranscribing || isUploadingVoice}
-                    className={`btn btn-full ${isRecording ? 'btn-danger' : 'btn-primary'}`}
+                    onClick={isListening ? stopListening : startListening}
+                    disabled={isLoading}
+                    className="btn"
                     style={{
-                      backgroundColor: isRecording ? '#dc2626' : '#3b82f6',
+                      backgroundColor: isListening ? '#dc2626' : '#3b82f6',
                       color: 'white',
-                      transform: isRecording ? 'scale(1.05)' : 'scale(1)',
-                      boxShadow: isRecording ? '0 0 20px rgba(220, 38, 38, 0.3)' : 'none',
+                      padding: '0.75rem 1rem',
+                      fontSize: '0.875rem',
+                      transform: isListening ? 'scale(1.05)' : 'scale(1)',
+                      boxShadow: isListening ? '0 0 20px rgba(220, 38, 38, 0.3)' : 'none',
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    {isRecording ? '🔴 Stop Recording' : '🎤 Start Recording'}
+                    {isListening ? '🔴 Stop Listening' : '🎤 Start Voice Input'}
+                  </button>
+                  
+                  <button
+                    onClick={clearText}
+                    disabled={!speechText.trim() || isListening}
+                    className="btn"
+                    style={{
+                      backgroundColor: '#6b7280',
+                      color: 'white',
+                      padding: '0.75rem 1rem',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    🗑️ Clear Text
                   </button>
                 </div>
                 
-                {isUploadingVoice && (
-                  <div className="text-center text-blue-600 font-medium" style={{ marginTop: '0.75rem' }}>
-                    <div style={{
-                      display: 'inline-block',
-                      width: '1rem',
-                      height: '1rem',
-                      border: '2px solid #2563eb',
-                      borderTop: '2px solid transparent',
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite',
-                      marginRight: '0.5rem'
-                    }}></div>
-                    Processing voice...
-                  </div>
-                )}
-                
-                {hasUserVoice && (
-                  <div className="text-center text-green-600 font-medium" style={{ 
-                    marginTop: '0.75rem',
-                    fontSize: '0.875rem'
-                  }}>
-                    ✅ Your voice is ready for AI speech generation!
-                  </div>
-                )}
+                <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#6b7280' }}>
+                  💡 Tip: Click "Start Voice Input" and speak clearly. Your speech will be converted to text automatically.
+                </div>
               </div>
+            )}
 
-              {/* Analysis Button */}
-              <button
-                onClick={analyzeSpeech}
-                disabled={!speechText.trim() || isLoading || isTranscribing}
-                className="btn btn-primary btn-full"
-                style={{
-                  background: !speechText.trim() || isLoading || isTranscribing 
-                    ? '#9ca3af' 
-                    : 'linear-gradient(to right, #3b82f6, #9333ea)',
-                  color: 'white',
-                  padding: '1rem 1.5rem',
-                  fontSize: '1.125rem',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                }}
-              >
-                {isLoading ? (
-                  <>
-                    <div style={{
-                      display: 'inline-block',
-                      width: '1.25rem',
-                      height: '1.25rem',
-                      border: '2px solid white',
-                      borderTop: '2px solid transparent',
-                      borderRadius: '50%',
-                      animation: 'spin 1s linear infinite',
-                      marginRight: '0.5rem'
-                    }}></div>
-                    Analyzing Speech...
-                  </>
-                ) : (
-                  <>🚀 Analyze Speech</>
-                )}
-              </button>
-            </div>
+            {!isSpeechSupported() && (
+              <div style={{
+                backgroundColor: '#fef3c7',
+                border: '1px solid #f59e0b',
+                borderRadius: '0.5rem',
+                padding: '1rem',
+                textAlign: 'center'
+              }}>
+                <span style={{ color: '#92400e', fontSize: '0.875rem' }}>
+                  ⚠️ Voice input not supported in this browser. Please use Chrome, Edge, or Safari for voice features.
+                </span>
+              </div>
+            )}
+
+            <button
+              onClick={analyzeSpeech}
+              disabled={!speechText.trim() || isLoading || isListening}
+              className="btn btn-primary btn-full"
+              style={{
+                background: !speechText.trim() || isLoading || isListening
+                  ? '#9ca3af' 
+                  : 'linear-gradient(to right, #3b82f6, #9333ea)',
+                color: 'white',
+                padding: '1rem 1.5rem',
+                fontSize: '1.125rem',
+                fontWeight: '600',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+              }}
+            >
+              {isLoading ? (
+                <>
+                  <div style={{
+                    display: 'inline-block',
+                    width: '1.25rem',
+                    height: '1.25rem',
+                    border: '2px solid white',
+                    borderTop: '2px solid transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                    marginRight: '0.5rem'
+                  }}></div>
+                  Analyzing Speech...
+                </>
+              ) : (
+                <>🚀 Analyze Speech</>
+              )}
+            </button>
+
+            {speechText.trim() && (
+              <div style={{
+                backgroundColor: '#f0f9ff',
+                border: '1px solid #0ea5e9',
+                borderRadius: '0.5rem',
+                padding: '0.75rem',
+                textAlign: 'center',
+                fontSize: '0.875rem',
+                color: '#0c4a6e'
+              }}>
+                ✅ Ready to analyze {speechText.length} characters of text
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -532,29 +544,29 @@ const ClarityAI = () => {
             <div className="grid-3">
               {analysisResult.alternateSpeeches.map((alt, index) => (
                 <div key={index} className="card-xs bg-gray-50 border transition-shadow hover-shadow">
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
                     alignItems: 'center',
-                    marginBottom: '0.5rem'
+                    marginBottom: '0.75rem' 
                   }}>
-                    <h4 className="font-semibold text-gray-900">📢 {alt.demographic}</h4>
+                    <h4 className="font-semibold text-purple-600 text-lg">📢 {alt.demographic}</h4>
                     <button
-                      onClick={() => playAudio(alt.speech)}
-                      disabled={isGeneratingAudio}
+                      onClick={() => playTextToSpeech(alt.speech, getVoiceType(alt.demographic), index)}
+                      disabled={isPlayingAudio !== null}
                       className="btn"
                       style={{
-                        backgroundColor: isGeneratingAudio ? '#fbbf24' : '#3b82f6',
+                        backgroundColor: isPlayingAudio === index ? '#fbbf24' : '#3b82f6',
                         color: 'white',
-                        padding: '0.5rem 0.75rem',
+                        padding: '0.5rem',
                         fontSize: '0.875rem',
-                        transition: 'all 0.2s ease'
+                        minWidth: '2.5rem'
                       }}
                     >
-                      {isGeneratingAudio ? '⏳' : '🔊'}
+                      {isPlayingAudio === index ? '⏸️' : '🔊'}
                     </button>
                   </div>
-                  <p className="text-gray-700 text-sm leading-relaxed">{alt.speech}</p>
+                  <p className="text-gray-700 leading-relaxed">{alt.speech}</p>
                 </div>
               ))}
             </div>
@@ -563,29 +575,34 @@ const ClarityAI = () => {
           {/* Action Buttons */}
           <div className="flex-center gap-4 pt-4">
             <button
-              onClick={() => playAudio(speechText)}
-              disabled={isGeneratingAudio}
-              className="btn btn-success transition-colors"
+              onClick={copyResults}
+              className="btn btn-primary transition-colors"
               style={{
-                backgroundColor: isGeneratingAudio ? '#fbbf24' : '#22c55e',
-                color: 'white'
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                padding: '0.75rem 1.5rem'
               }}
             >
-              {isGeneratingAudio ? '⏳ Generating...' : '🔊 Play Original'}
+              📋 Copy Results
             </button>
             
             <button
               onClick={resetApp}
               className="btn btn-secondary transition-colors"
+              style={{
+                backgroundColor: '#6b7280',
+                color: 'white',
+                padding: '0.75rem 1.5rem'
+              }}
             >
               🔁 New Analysis
             </button>
           </div>
 
-          {isGeneratingAudio && (
+          {isPlayingAudio !== null && (
             <div className="text-center">
               <p className="text-blue-600 font-medium">
-                🎵 Generating audio with {hasUserVoice ? 'your voice' : "default voice"}...
+                🎵 Playing audio for {analysisResult.alternateSpeeches[isPlayingAudio]?.demographic}...
               </p>
             </div>
           )}
@@ -596,8 +613,6 @@ const ClarityAI = () => {
 };
 
 export default ClarityAI;
-
-
 
 
 // import React, { useState, useEffect } from 'react';
