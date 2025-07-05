@@ -9,6 +9,7 @@ const ClarityAI = () => {
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(null);
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   const recognitionRef = useRef(null);
   const audioRef = useRef(null);
@@ -41,7 +42,6 @@ const ClarityAI = () => {
           }
         }
 
-        // Update speech text with final results
         if (finalTranscript) {
           setSpeechText(prev => prev + finalTranscript);
         }
@@ -61,17 +61,47 @@ const ClarityAI = () => {
     }
   }, []);
 
+  // Theme toggle function
+  const toggleTheme = () => {
+    const newTheme = !isDarkMode;
+    setIsDarkMode(newTheme);
+    
+    // Save to localStorage
+    localStorage.setItem('clarityai-theme', newTheme ? 'dark' : 'light');
+    
+    // Apply theme to document
+    document.documentElement.setAttribute('data-theme', newTheme ? 'dark' : 'light');
+  };
+
   useEffect(() => {
-    // Show intro screen for 3 seconds
+    // Load saved theme or detect system preference
+    const savedTheme = localStorage.getItem('clarityai-theme');
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    let initialTheme;
+    if (savedTheme) {
+      initialTheme = savedTheme === 'dark';
+    } else {
+      initialTheme = systemPrefersDark;
+    }
+    
+    setIsDarkMode(initialTheme);
+    document.documentElement.setAttribute('data-theme', initialTheme ? 'dark' : 'light');
+    document.body.className = initialTheme ? 'dark-theme' : 'light-theme';
+    
     const timer = setTimeout(() => {
       setCurrentScreen('input');
     }, 3000);
 
-    // Initialize Web Speech API
     initializeSpeechRecognition();
 
     return () => clearTimeout(timer);
   }, [initializeSpeechRecognition]);
+
+  // Update body class when theme changes
+  useEffect(() => {
+    document.body.className = isDarkMode ? 'dark-theme' : 'light-theme';
+  }, [isDarkMode]);
 
   const showError = (message) => {
     setError(message);
@@ -133,39 +163,47 @@ const ClarityAI = () => {
     }
   };
 
-  // Text-to-Speech using ResponsiveVoice API (free)
+  // Enhanced Text-to-Speech with natural voices and pause functionality
   const playTextToSpeech = async (text, voiceType = 'default', speechIndex = null) => {
+    // If already playing this speech, pause it
+    if (isPlayingAudio === speechIndex) {
+      pauseTextToSpeech();
+      return;
+    }
+    
+    // Stop any currently playing speech
+    if (isPlayingAudio !== null) {
+      stopTextToSpeech();
+    }
+    
     setIsPlayingAudio(speechIndex);
 
     try {
-      // Define different voices for different perspectives
+      // Enhanced voice selection for more natural speech
       const voices = {
         'progressive': 'UK English Female',
-        'conservative': 'UK English Male',
-        'moderate': 'US English Female',
-        'default': 'US English Male'
+        'conservative': 'US English Male', 
+        'moderate': 'Australian English Female',
+        'default': 'US English Female'
       };
 
       const voiceName = voices[voiceType] || voices['default'];
 
-      // Check if ResponsiveVoice is available
       if (typeof window.responsiveVoice !== 'undefined') {
         window.responsiveVoice.speak(text, voiceName, {
-          rate: 0.9,
-          pitch: 1,
-          volume: 0.8,
+          rate: 0.85,          // Slightly slower for more natural pace
+          pitch: 1.0,          // Natural pitch
+          volume: 0.9,         // Higher volume
           onend: () => {
             setIsPlayingAudio(null);
           },
           onerror: () => {
             setIsPlayingAudio(null);
-            // Fallback to browser TTS
-            fallbackToSpeechSynthesis(text);
+            fallbackToSpeechSynthesis(text, voiceType);
           }
         });
       } else {
-        // Fallback to browser's built-in speech synthesis
-        fallbackToSpeechSynthesis(text);
+        fallbackToSpeechSynthesis(text, voiceType);
       }
     } catch (error) {
       console.error('TTS error:', error);
@@ -174,13 +212,63 @@ const ClarityAI = () => {
     }
   };
 
-  // Fallback TTS using browser's Speech Synthesis API
-  const fallbackToSpeechSynthesis = (text) => {
+  const pauseTextToSpeech = () => {
+    if (typeof window.responsiveVoice !== 'undefined') {
+      window.responsiveVoice.pause();
+    } else if ('speechSynthesis' in window) {
+      window.speechSynthesis.pause();
+    }
+    setIsPlayingAudio(null);
+  };
+
+  const stopTextToSpeech = () => {
+    if (typeof window.responsiveVoice !== 'undefined') {
+      window.responsiveVoice.cancel();
+    } else if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsPlayingAudio(null);
+  };
+
+  // Enhanced fallback TTS with better voice selection
+  const fallbackToSpeechSynthesis = (text, voiceType) => {
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-      utterance.volume = 0.8;
+      
+      // Get available voices and select the best one
+      const voices = window.speechSynthesis.getVoices();
+      let selectedVoice = null;
+      
+      // Voice selection logic for different demographics
+      if (voiceType === 'progressive') {
+        selectedVoice = voices.find(voice => 
+          voice.name.includes('Female') && 
+          (voice.name.includes('UK') || voice.name.includes('British'))
+        ) || voices.find(voice => voice.name.includes('Female'));
+      } else if (voiceType === 'conservative') {
+        selectedVoice = voices.find(voice => 
+          voice.name.includes('Male') && 
+          voice.name.includes('US')
+        ) || voices.find(voice => voice.name.includes('Male'));
+      } else if (voiceType === 'moderate') {
+        selectedVoice = voices.find(voice => 
+          voice.name.includes('Female') && 
+          voice.name.includes('Australian')
+        ) || voices.find(voice => voice.name.includes('Female'));
+      } else {
+        selectedVoice = voices.find(voice => 
+          voice.name.includes('Female') && 
+          voice.name.includes('US')
+        ) || voices.find(voice => voice.name.includes('Female'));
+      }
+      
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+      
+      utterance.rate = 0.85;    // Natural speaking rate
+      utterance.pitch = 1.0;    // Natural pitch
+      utterance.volume = 0.9;   // Good volume level
       
       utterance.onend = () => {
         setIsPlayingAudio(null);
@@ -239,7 +327,7 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
   };
 
   return (
-    <div>
+    <div className={`app-container ${isDarkMode ? 'dark-theme' : 'light-theme'}`}>
       {/* Load ResponsiveVoice API */}
       {typeof window !== 'undefined' && (
         <script src="https://code.responsivevoice.org/responsivevoice.js?key=FREE_TRIAL_KEY"></script>
@@ -247,253 +335,158 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
 
       <audio ref={audioRef} />
       
+      {/* Theme Toggle Button */}
+      <button 
+        className="theme-toggle"
+        onClick={toggleTheme}
+        aria-label="Toggle theme"
+        title={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
+      >
+        {isDarkMode ? '☀️' : '🌙'}
+      </button>
+      
+      {/* Animated background */}
+      <div className="background-animation">
+        <div className="floating-shape shape-1"></div>
+        <div className="floating-shape shape-2"></div>
+        <div className="floating-shape shape-3"></div>
+        <div className="floating-shape shape-4"></div>
+      </div>
+      
       {/* Error Toast */}
       {error && (
-        <div style={{
-          position: 'fixed',
-          top: '1rem',
-          right: '1rem',
-          backgroundColor: '#dc2626',
-          color: 'white',
-          padding: '1rem',
-          borderRadius: '0.5rem',
-          zIndex: 50,
-          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span>⚠️</span>
+        <div className="error-toast">
+          <div className="error-content">
+            <span className="error-icon">⚠️</span>
             <span>{error}</span>
           </div>
         </div>
       )}
 
-      {/* Intro Screen with Bouncing Animation */}
+      {/* Intro Screen */}
       {currentScreen === 'intro' && (
         <div className="intro-screen">
-          <div className="text-center">
-            <h1 className="intro-title font-times">
-              Clarity
-            </h1>
-            <div style={{ animation: 'bounce 1s infinite' }}>
-              <div style={{
-                width: '4rem',
-                height: '4rem',
-                backgroundColor: '#3b82f6',
-                borderRadius: '50%',
-                margin: '0 auto'
-              }}></div>
+          <div className="intro-content">
+            <div className="logo-container">
+              <h1 className="app-title">Clarity</h1>
+              <div className="subtitle">AI-Powered Speech Analysis</div>
             </div>
+            <div className="loading-orb"></div>
           </div>
         </div>
       )}
 
       {/* Input Screen */}
       {currentScreen === 'input' && (
-        <div className="container-sm">
-          <div className="text-center space-y-4">
-            <h1 className="text-5xl font-bold text-gray-900 font-times">
-              Clarity
-            </h1>
-            <p className="text-xl text-gray-600 font-medium">
-              Analyze your speech and explore alternative perspectives
-            </p>
-          </div>
+        <div className="screen-container">
+          <div className="glass-container">
+            <div className="header-section">
+              <h1 className="main-title">Clarity</h1>
+              <p className="main-subtitle">
+                Analyze your speech and explore alternative perspectives
+              </p>
+            </div>
 
-          <div className="card space-y-6">
-            <div className="space-y-4">
-              <label className="text-lg font-semibold text-gray-900">
-                Enter your speech or use voice input
-              </label>
-              <textarea
-                value={speechText}
-                onChange={(e) => setSpeechText(e.target.value)}
-                placeholder="Type your speech here or use the microphone button below..."
-                className="textarea"
-                style={{
-                  minHeight: '150px',
-                  borderColor: isTranscribing ? '#3b82f6' : '#e5e7eb'
-                }}
-              />
-              
-              {isTranscribing && (
-                <div className="text-center text-blue-600 font-medium">
-                  <div style={{
-                    display: 'inline-block',
-                    width: '1rem',
-                    height: '1rem',
-                    border: '2px solid #2563eb',
-                    borderTop: '2px solid transparent',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite',
-                    marginRight: '0.5rem'
-                  }}></div>
-                  Listening... Speak now
+            <div className="input-card">
+              <div className="input-section">
+                <label className="input-label">
+                  Enter your speech or use voice input
+                </label>
+                <textarea
+                  value={speechText}
+                  onChange={(e) => setSpeechText(e.target.value)}
+                  placeholder="Type your speech here or use the microphone button below..."
+                  className={`speech-textarea ${isTranscribing ? 'listening' : ''}`}
+                />
+                
+                {isTranscribing && (
+                  <div className="transcribing-indicator">
+                    <div className="pulse-dot"></div>
+                    Listening... Speak now
+                  </div>
+                )}
+              </div>
+
+              {/* Voice Input Controls */}
+              {isSpeechSupported() && (
+                <div className="voice-controls">
+                  <div className="voice-header">
+                    <span className="voice-title">🎤 Voice Input</span>
+                    {isListening && (
+                      <span className="recording-indicator">
+                        🔴 Recording...
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="voice-buttons">
+                    <button 
+                      onClick={isListening ? stopListening : startListening}
+                      disabled={isLoading}
+                      className={`voice-btn ${isListening ? 'recording' : 'ready'}`}
+                    >
+                      {isListening ? '⏹️ Stop Listening' : '🎤 Start Voice Input'}
+                    </button>
+                    
+                    <button
+                      onClick={clearText}
+                      disabled={!speechText.trim() || isListening}
+                      className="clear-btn"
+                    >
+                      🗑️ Clear Text
+                    </button>
+                  </div>
+                  
+                  <div className="voice-tip">
+                    💡 Click "Start Voice Input" and speak clearly
+                  </div>
+                </div>
+              )}
+
+              {!isSpeechSupported() && (
+                <div className="warning-card">
+                  <span>
+                    ⚠️ Voice input not supported. Please use Chrome, Edge, or Safari.
+                  </span>
+                </div>
+              )}
+
+              <button
+                onClick={analyzeSpeech}
+                disabled={!speechText.trim() || isLoading || isListening}
+                className="analyze-btn"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="btn-spinner"></div>
+                    Analyzing Speech...
+                  </>
+                ) : (
+                  <>🚀 Analyze Speech</>
+                )}
+              </button>
+
+              {speechText.trim() && (
+                <div className="ready-indicator">
+                  ✅ Ready to analyze {speechText.length} characters
                 </div>
               )}
             </div>
-
-            {/* Voice Input Controls */}
-            {isSpeechSupported() && (
-              <div style={{
-                backgroundColor: '#f9fafb',
-                borderRadius: '0.5rem',
-                padding: '1rem',
-                border: '1px solid #e5e7eb'
-              }}>
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '0.75rem'
-                }}>
-                  <span className="font-medium text-gray-700">🎤 Voice Input</span>
-                  {isListening && (
-                    <span style={{
-                      color: '#dc2626',
-                      fontWeight: 'bold',
-                      animation: 'pulse 1s infinite'
-                    }}>
-                      🔴 Recording...
-                    </span>
-                  )}
-                </div>
-                
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <button 
-                    onClick={isListening ? stopListening : startListening}
-                    disabled={isLoading}
-                    className="btn"
-                    style={{
-                      backgroundColor: isListening ? '#dc2626' : '#3b82f6',
-                      color: 'white',
-                      padding: '0.75rem 1rem',
-                      fontSize: '0.875rem',
-                      transform: isListening ? 'scale(1.05)' : 'scale(1)',
-                      boxShadow: isListening ? '0 0 20px rgba(220, 38, 38, 0.3)' : 'none',
-                      transition: 'all 0.2s ease'
-                    }}
-                  >
-                    {isListening ? '🔴 Stop Listening' : '🎤 Start Voice Input'}
-                  </button>
-                  
-                  <button
-                    onClick={clearText}
-                    disabled={!speechText.trim() || isListening}
-                    className="btn"
-                    style={{
-                      backgroundColor: '#6b7280',
-                      color: 'white',
-                      padding: '0.75rem 1rem',
-                      fontSize: '0.875rem'
-                    }}
-                  >
-                    🗑️ Clear Text
-                  </button>
-                </div>
-                
-                <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#6b7280' }}>
-                  💡 Tip: Click "Start Voice Input" and speak clearly. Your speech will be converted to text automatically.
-                </div>
-              </div>
-            )}
-
-            {!isSpeechSupported() && (
-              <div style={{
-                backgroundColor: '#fef3c7',
-                border: '1px solid #f59e0b',
-                borderRadius: '0.5rem',
-                padding: '1rem',
-                textAlign: 'center'
-              }}>
-                <span style={{ color: '#92400e', fontSize: '0.875rem' }}>
-                  ⚠️ Voice input not supported in this browser. Please use Chrome, Edge, or Safari for voice features.
-                </span>
-              </div>
-            )}
-
-            <button
-              onClick={analyzeSpeech}
-              disabled={!speechText.trim() || isLoading || isListening}
-              className="btn btn-primary btn-full"
-              style={{
-                background: !speechText.trim() || isLoading || isListening
-                  ? '#9ca3af' 
-                  : 'linear-gradient(to right, #3b82f6, #9333ea)',
-                color: 'white',
-                padding: '1rem 1.5rem',
-                fontSize: '1.125rem',
-                fontWeight: '600',
-                transition: 'all 0.2s ease',
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-              }}
-            >
-              {isLoading ? (
-                <>
-                  <div style={{
-                    display: 'inline-block',
-                    width: '1.25rem',
-                    height: '1.25rem',
-                    border: '2px solid white',
-                    borderTop: '2px solid transparent',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite',
-                    marginRight: '0.5rem'
-                  }}></div>
-                  Analyzing Speech...
-                </>
-              ) : (
-                <>🚀 Analyze Speech</>
-              )}
-            </button>
-
-            {speechText.trim() && (
-              <div style={{
-                backgroundColor: '#f0f9ff',
-                border: '1px solid #0ea5e9',
-                borderRadius: '0.5rem',
-                padding: '0.75rem',
-                textAlign: 'center',
-                fontSize: '0.875rem',
-                color: '#0c4a6e'
-              }}>
-                ✅ Ready to analyze {speechText.length} characters of text
-              </div>
-            )}
           </div>
         </div>
       )}
 
       {/* Loading Screen */}
       {currentScreen === 'loading' && (
-        <div className="loading-container flex-center flex-col space-y-4 text-center">
-          <div className="loader"></div>
-          <div className="space-y-4">
-            <p className="text-xl font-semibold text-gray-900">Analyzing your speech...</p>
-            <p className="text-sm text-gray-600">Identifying perspectives and generating alternatives</p>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.25rem', marginTop: '1rem' }}>
-              <div style={{
-                width: '0.5rem',
-                height: '0.5rem',
-                backgroundColor: '#3b82f6',
-                borderRadius: '50%',
-                animation: 'bounce 1s infinite'
-              }}></div>
-              <div style={{
-                width: '0.5rem',
-                height: '0.5rem',
-                backgroundColor: '#3b82f6',
-                borderRadius: '50%',
-                animation: 'bounce 1s infinite',
-                animationDelay: '0.1s'
-              }}></div>
-              <div style={{
-                width: '0.5rem',
-                height: '0.5rem',
-                backgroundColor: '#3b82f6',
-                borderRadius: '50%',
-                animation: 'bounce 1s infinite',
-                animationDelay: '0.2s'
-              }}></div>
+        <div className="loading-screen">
+          <div className="loading-content">
+            <div className="main-loader"></div>
+            <h2 className="loading-title">Analyzing your speech...</h2>
+            <p className="loading-subtitle">Identifying perspectives and generating alternatives</p>
+            <div className="loading-dots">
+              <div className="dot"></div>
+              <div className="dot"></div>
+              <div className="dot"></div>
             </div>
           </div>
         </div>
@@ -501,111 +494,73 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
 
       {/* Results Screen */}
       {currentScreen === 'results' && analysisResult && (
-        <div className="container space-y-8">
-          <div className="text-center space-y-4">
-            <h2 className="text-3xl font-bold text-gray-900">
-              Speech Analysis Results
-            </h2>
-            <p className="text-gray-600">Exploring multiple perspectives on your content</p>
-          </div>
-
-          {/* Category and Demographics */}
-          <div className="grid-2">
-            <div className="card-sm">
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                ✅ Detected Category
-              </h3>
-              <p className="text-blue-600 text-lg font-medium">{analysisResult.category}</p>
+        <div className="screen-container results-screen">
+          <div className="glass-container">
+            <div className="header-section">
+              <h2 className="results-title">Speech Analysis Results</h2>
+              <p className="results-subtitle">Exploring multiple perspectives on your content</p>
             </div>
-            <div className="card-sm">
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                🧭 Identified Demographics
-              </h3>
-              <div className="space-y-2">
-                {analysisResult.demographics.map((demographic, index) => (
-                  <div key={index} style={{ display: 'flex', alignItems: 'center' }}>
-                    <span style={{
-                      width: '0.5rem',
-                      height: '0.5rem',
-                      backgroundColor: '#3b82f6',
-                      borderRadius: '50%',
-                      marginRight: '0.75rem'
-                    }}></span>
-                    <span className="text-gray-700 font-medium">{demographic}</span>
+
+            {/* Category and Demographics */}
+            <div className="stats-grid">
+              <div className="stat-card">
+                <h3 className="stat-title">✅ Detected Category</h3>
+                <p className="stat-value">{analysisResult.category}</p>
+              </div>
+              <div className="stat-card">
+                <h3 className="stat-title">🧭 Identified Demographics</h3>
+                <div className="demographics-list">
+                  {analysisResult.demographics.map((demographic, index) => (
+                    <div key={index} className="demographic-item">
+                      <span className="demographic-dot"></span>
+                      <span>{demographic}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Alternative Speeches - Three Columns */}
+            <div className="alternatives-section">
+              <h3 className="alternatives-title">🔁 Alternative Perspectives</h3>
+              <div className="alternatives-grid">
+                {analysisResult.alternateSpeeches.map((alt, index) => (
+                  <div key={index} className="alternative-card">
+                    <div className="alt-header">
+                      <h4 className="alt-demographic">📢 {alt.demographic}</h4>
+                      <button
+                        onClick={() => playTextToSpeech(alt.speech, getVoiceType(alt.demographic), index)}
+                        className={`play-btn ${isPlayingAudio === index ? 'playing' : ''}`}
+                        title={isPlayingAudio === index ? 'Pause speech' : 'Play speech'}
+                      >
+                        {isPlayingAudio === index ? '⏸️' : '▶️'}
+                      </button>
+                    </div>
+                    <p className="alt-speech">{alt.speech}</p>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
 
-          {/* Alternative Speeches */}
-          <div className="card-sm">
-            <h3 className="text-xl font-semibold mb-4 text-gray-900">🔁 Alternative Perspectives</h3>
-            <div className="grid-3">
-              {analysisResult.alternateSpeeches.map((alt, index) => (
-                <div key={index} className="card-xs bg-gray-50 border transition-shadow hover-shadow">
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center',
-                    marginBottom: '0.75rem' 
-                  }}>
-                    <h4 className="font-semibold text-purple-600 text-lg">📢 {alt.demographic}</h4>
-                    <button
-                      onClick={() => playTextToSpeech(alt.speech, getVoiceType(alt.demographic), index)}
-                      disabled={isPlayingAudio !== null}
-                      className="btn"
-                      style={{
-                        backgroundColor: isPlayingAudio === index ? '#fbbf24' : '#3b82f6',
-                        color: 'white',
-                        padding: '0.5rem',
-                        fontSize: '0.875rem',
-                        minWidth: '2.5rem'
-                      }}
-                    >
-                      {isPlayingAudio === index ? '⏸️' : '🔊'}
-                    </button>
-                  </div>
-                  <p className="text-gray-700 leading-relaxed">{alt.speech}</p>
-                </div>
-              ))}
+            {/* Action Buttons */}
+            <div className="action-buttons">
+              <button onClick={copyResults} className="action-btn primary">
+                📋 Copy Results
+              </button>
+              
+              <button onClick={resetApp} className="action-btn secondary">
+                🔁 New Analysis
+              </button>
             </div>
-          </div>
 
-          {/* Action Buttons */}
-          <div className="flex-center gap-4 pt-4">
-            <button
-              onClick={copyResults}
-              className="btn btn-primary transition-colors"
-              style={{
-                backgroundColor: '#3b82f6',
-                color: 'white',
-                padding: '0.75rem 1.5rem'
-              }}
-            >
-              📋 Copy Results
-            </button>
-            
-            <button
-              onClick={resetApp}
-              className="btn btn-secondary transition-colors"
-              style={{
-                backgroundColor: '#6b7280',
-                color: 'white',
-                padding: '0.75rem 1.5rem'
-              }}
-            >
-              🔁 New Analysis
-            </button>
+            {isPlayingAudio !== null && (
+              <div className="audio-status">
+                <p>
+                  🎵 Playing audio for {analysisResult.alternateSpeeches[isPlayingAudio]?.demographic}...
+                </p>
+              </div>
+            )}
           </div>
-
-          {isPlayingAudio !== null && (
-            <div className="text-center">
-              <p className="text-blue-600 font-medium">
-                🎵 Playing audio for {analysisResult.alternateSpeeches[isPlayingAudio]?.demographic}...
-              </p>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -613,292 +568,3 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
 };
 
 export default ClarityAI;
-
-
-// import React, { useState, useEffect } from 'react';
-
-// const ClarityAI = () => {
-//   const [currentScreen, setCurrentScreen] = useState('intro');
-//   const [speechInput, setSpeechInput] = useState('');
-//   const [analysisData, setAnalysisData] = useState(null);
-
-//   useEffect(() => {
-//     // Show intro screen for 3 seconds
-//     const timer = setTimeout(() => {
-//       setCurrentScreen('input');
-//     }, 3000);
-
-//     return () => clearTimeout(timer);
-//   }, []);
-
-//   const startAnalysis = () => {
-//     if (!speechInput.trim()) {
-//       alert('Please enter some speech text to analyze');
-//       return;
-//     }
-
-//     setCurrentScreen('loading');
-    
-//     // Simulate API call with mock data
-//     setTimeout(() => {
-//       const mockData = {
-//         category: 'Economics',
-//         viewpoints: ['Marxian', 'Keynesian', 'Adam Smith School'],
-//         alternateSpeeches: [
-//           {
-//             type: 'Marxian',
-//             content: 'The economic struggle stems from class disparities and requires collective action to redistribute wealth and power to the working class.'
-//           },
-//           {
-//             type: 'Keynesian', 
-//             content: 'Government spending is essential to stabilize economic fluctuations and maintain full employment through strategic fiscal policy.'
-//           },
-//           {
-//             type: 'Adam Smith',
-//             content: 'Free markets will regulate themselves through invisible hands, promoting efficiency and prosperity when left unencumbered.'
-//           }
-//         ],
-//         pros: ['Strong call to action', 'Clear structure', 'Compelling rhetoric'],
-//         cons: ['Lacks nuance', 'Overly idealistic', 'Missing counterarguments'],
-//         politicalImpact: 'This speech may resonate with progressives but alienate fiscal conservatives.',
-//         framingDifferences: [
-//           { perspective: 'Left', framing: 'Peaceful activists demand economic justice' },
-//           { perspective: 'Right', framing: 'Radicals threaten free market principles' },
-//           { perspective: 'Center', framing: 'Citizens debate economic policy approaches' },
-//           { perspective: 'Reddit', framing: 'Just more Monday economic chaos 💀' }
-//         ]
-//       };
-      
-//       setAnalysisData(mockData);
-//       setCurrentScreen('analysis');
-//     }, 2500);
-//   };
-
-//   const resetAnalysis = () => {
-//     setSpeechInput('');
-//     setAnalysisData(null);
-//     setCurrentScreen('input');
-//   };
-
-//   const copyResults = () => {
-//     if (!analysisData) return;
-    
-//     const resultsText = `
-// ClarityAI Analysis Results
-// ========================
-
-// Category: ${analysisData.category}
-// Viewpoints: ${analysisData.viewpoints.join(', ')}
-
-// Pros: ${analysisData.pros.join(', ')}
-// Cons: ${analysisData.cons.join(', ')}
-
-// Political Impact: ${analysisData.politicalImpact}
-
-// Alternative Perspectives:
-// ${analysisData.alternateSpeeches.map(speech => `${speech.type}: ${speech.content}`).join('\n')}
-
-// Framing Differences:
-// ${analysisData.framingDifferences.map(frame => `${frame.perspective}: ${frame.framing}`).join('\n')}
-//     `.trim();
-    
-//     navigator.clipboard.writeText(resultsText).then(() => {
-//       alert('Results copied to clipboard!');
-//     }).catch(() => {
-//       alert('Failed to copy to clipboard');
-//     });
-//   };
-
-//   const speakResults = () => {
-//     if (!analysisData) return;
-    
-//     if ('speechSynthesis' in window) {
-//       const utterance = new SpeechSynthesisUtterance(analysisData.politicalImpact);
-//       utterance.rate = 0.8;
-//       utterance.pitch = 1;
-//       window.speechSynthesis.speak(utterance);
-//     } else {
-//       alert('Speech synthesis not supported in this browser');
-//     }
-//   };
-
-//   const handleRecordSpeech = () => {
-//     // Placeholder for future speech recording implementation
-//     alert('Speech recording feature coming soon!');
-//   };
-
-//   return (
-//     <div>
-//       {/* Intro Screen */}
-//       {currentScreen === 'intro' && (
-//         <div className="intro-screen flex-center">
-//           <h1 className="intro-title font-times">
-//             Clarity
-//           </h1>
-//         </div>
-//       )}
-
-//       {/* Input Screen */}
-//       {currentScreen === 'input' && (
-//         <div className="container-sm space-y-8">
-//           <div className="text-center space-y-4">
-//             <h1 className="text-5xl font-bold text-gray-900 font-times">
-//               Clarity
-//             </h1>
-//             <p className="text-xl text-gray-600 font-medium">
-//               Analyze your speech and explore alternative perspectives
-//             </p>
-//           </div>
-
-//           <div className="card space-y-6">
-//             <div className="space-y-4">
-//               <label className="text-lg font-semibold text-gray-900">
-//                 Enter your speech or talking points
-//               </label>
-//               <textarea
-//                 value={speechInput}
-//                 onChange={(e) => setSpeechInput(e.target.value)}
-//                 placeholder="Paste your speech here..."
-//                 className="textarea"
-//               />
-//             </div>
-
-//             <div className="flex gap-4">
-//               <button 
-//                 onClick={handleRecordSpeech}
-//                 className="btn btn-secondary btn-full"
-//               >
-//                 🎤 Record Speech
-//               </button>
-//               <button
-//                 onClick={startAnalysis}
-//                 className="btn btn-primary btn-full"
-//               >
-//                 🚀 Analyze Speech
-//               </button>
-//             </div>
-//           </div>
-//         </div>
-//       )}
-
-//       {/* Loading Screen */}
-//       {currentScreen === 'loading' && (
-//         <div className="loading-container flex-center flex-col space-y-4 text-center">
-//           <div className="loader"></div>
-//           <p className="text-lg font-medium">Analyzing your speech...</p>
-//           <p className="text-sm text-gray-500">Identifying perspectives and generating alternatives</p>
-//         </div>
-//       )}
-
-//       {/* Analysis Screen */}
-//       {currentScreen === 'analysis' && analysisData && (
-//         <div className="container space-y-8">
-//           <div className="text-center space-y-4">
-//             <h2 className="text-3xl font-bold text-gray-900">
-//               Speech Analysis Results
-//             </h2>
-//             <p className="text-gray-600">Exploring multiple perspectives on your content</p>
-//           </div>
-
-//           {/* Category and Viewpoints */}
-//           <div className="grid grid-2">
-//             <div className="card-sm">
-//               <h3 className="text-xl font-semibold text-gray-900 mb-2">
-//                 ✅ Detected Category
-//               </h3>
-//               <p className="text-blue-600 text-lg font-medium">{analysisData.category}</p>
-//             </div>
-//             <div className="card-sm">
-//               <h3 className="text-xl font-semibold text-gray-900 mb-2">
-//                 🧭 Identified Viewpoints
-//               </h3>
-//               <ul className="list-disc text-gray-700 space-y-4">
-//                 {analysisData.viewpoints.map((viewpoint, index) => (
-//                   <li key={index} className="list-item font-medium">{viewpoint}</li>
-//                 ))}
-//               </ul>
-//             </div>
-//           </div>
-
-//           {/* Alternate Speeches */}
-//           <div className="card-sm">
-//             <h3 className="text-xl font-semibold mb-4 text-gray-900">🔁 Alternative Perspectives</h3>
-//             <div className="grid grid-3">
-//               {analysisData.alternateSpeeches.map((speech, index) => (
-//                 <div key={index} className="card-xs bg-gray-50 border transition-shadow hover-shadow">
-//                   <div className="font-semibold text-gray-900 mb-2">
-//                     📢 {speech.type}
-//                   </div>
-//                   <p className="text-gray-700 text-sm leading-relaxed">{speech.content}</p>
-//                 </div>
-//               ))}
-//             </div>
-//           </div>
-
-//           {/* Pros, Cons, and Impact */}
-//           <div className="grid grid-3">
-//             <div className="card-xs">
-//               <h4 className="font-semibold mb-3 text-green-600 text-lg">✅ Strengths</h4>
-//               <ul className="list-disc text-gray-700 space-y-4">
-//                 {analysisData.pros.map((pro, index) => (
-//                   <li key={index} className="list-item text-sm">{pro}</li>
-//                 ))}
-//               </ul>
-//             </div>
-//             <div className="card-xs">
-//               <h4 className="font-semibold mb-3 text-red-600 text-lg">❌ Weaknesses</h4>
-//               <ul className="list-disc text-gray-700 space-y-4">
-//                 {analysisData.cons.map((con, index) => (
-//                   <li key={index} className="list-item text-sm">{con}</li>
-//                 ))}
-//               </ul>
-//             </div>
-//             <div className="card-xs">
-//               <h4 className="font-semibold mb-3 text-purple-600 text-lg">
-//                 🧠 Political Impact
-//               </h4>
-//               <p className="text-gray-700 text-sm leading-relaxed">{analysisData.politicalImpact}</p>
-//             </div>
-//           </div>
-
-//           {/* Framing Differences */}
-//           <div className="card-sm">
-//             <h3 className="text-xl font-semibold mb-4 text-gray-900">🪞 How Different Groups Frame This</h3>
-//             <div className="grid grid-2">
-//               {analysisData.framingDifferences.map((framing, index) => (
-//                 <div key={index} className="card-xs bg-gray-50 rounded-lg">
-//                   <span className="font-semibold text-gray-900">{framing.perspective}:</span>{' '}
-//                   <span className="text-gray-700 italic">"{framing.framing}"</span>
-//                 </div>
-//               ))}
-//             </div>
-//           </div>
-
-//           {/* Action Buttons */}
-//           <div className="flex-center gap-4 pt-4">
-//             <button
-//               onClick={copyResults}
-//               className="btn btn-primary transition-colors"
-//             >
-//               📋 Copy Results
-//             </button>
-//             <button
-//               onClick={resetAnalysis}
-//               className="btn btn-secondary transition-colors"
-//             >
-//               🔁 New Analysis
-//             </button>
-//             <button
-//               onClick={speakResults}
-//               className="btn btn-success transition-colors"
-//             >
-//               🔊 Read Aloud
-//             </button>
-//           </div>
-//         </div>
-//       )}
-//     </div>
-//   );
-// };
-
-// export default ClarityAI;

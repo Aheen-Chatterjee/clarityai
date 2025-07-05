@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import ClarityAI from './components/ClarityAI';
 import NotFound from './components/NotFound';
+import './index.css';
 
 function App() {
   return (
