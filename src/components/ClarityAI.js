@@ -687,6 +687,9 @@ ${analysisResult.alternateSpeeches.map(alt => `${alt.demographic}: ${alt.speech}
             <div className="stats-grid">
               <div className="stat-card">
                 <h3 className="stat-title">✅ Detected Category</h3>
+              return (
+                  <div className={`app-container ${isDarkMode ? 'dark-theme' : 'light-theme'}`}>
+                  <LanguageSwitcher />
                 <p className="stat-value">{analysisResult.category}</p>
               </div>
               <div className="stat-card">
